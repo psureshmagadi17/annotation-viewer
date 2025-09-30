@@ -51,6 +51,20 @@ export function arrayBufferToUint8Array(buffer: ArrayBuffer): Uint8Array {
 }
 
 /**
+ * Create a deep copy of Uint8Array to avoid ArrayBuffer detachment issues
+ */
+export function copyUint8Array(uint8Array: Uint8Array): Uint8Array {
+  return new Uint8Array(uint8Array.buffer.slice())
+}
+
+/**
+ * Create a copy of ArrayBuffer before it gets detached
+ */
+export function copyArrayBuffer(buffer: ArrayBuffer): ArrayBuffer {
+  return buffer.slice()
+}
+
+/**
  * Generate unique annotation ID
  */
 export function generateAnnotationId(): string {

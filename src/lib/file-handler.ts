@@ -12,8 +12,10 @@ export async function handleFileSelection(): Promise<File | null> {
     
     input.onchange = (event) => {
       const file = (event.target as HTMLInputElement).files?.[0]
+      
       if (file) {
         const validation = validatePdfFile(file)
+        
         if (validation.valid) {
           resolve(file)
         } else {

@@ -1,62 +1,117 @@
-import { PDFDocument, PDFPage, PDFAnnotation } from 'pdf-lib'
-import { Annotation, PdfAnnotationExtracted, AnnotationExtractionResult, BoundingBox, NormalizedBoundingBox } from '@/types'
+import { Annotation, AnnotationExtractionResult, BoundingBox, NormalizedBoundingBox } from '@/types'
+import { normalizeCoordinates } from './utils'
 
 /**
- * Extract annotations from a PDF document using pdf-lib
+ * Extract annotations from a PDF document using PDF.js
+ * This replaces the pdf-lib approach with PDF.js's built-in getAnnotations() method
  */
-export async function extractAnnotationsFromPdf(
-  pdfBytes: Uint8Array,
+export async function extractAnnotationsFromPdfJs(
+  pdfDocument: any,
   fileName: string
 ): Promise<AnnotationExtractionResult> {
   try {
-    const pdfDoc = await PDFDocument.load(pdfBytes)
-    const pages = pdfDoc.getPages()
+    console.log('🔍 Starting annotation extraction from PDF using PDF.js...')
+    
     const annotations: Annotation[] = []
     const errors: string[] = []
     const pagesWithAnnotations = new Set<number>()
     const annotationTypes = new Set<string>()
-
-    for (let pageIndex = 0; pageIndex < pages.length; pageIndex++) {
-      const page = pages[pageIndex]
-      const pageNumber = pageIndex + 1
-      const pageSize = page.getSize()
+    
+    const numPages = pdfDocument.numPages
+    
+    for (let pageNumber = 1; pageNumber <= numPages; pageNumber++) {
+      console.log(`\n📄 Processing Page ${pageNumber}...`)
       
       try {
-        const pageAnnotations = page.node.Annots || []
+        // Get the page
+        const page = await pdfDocument.getPage(pageNumber)
+        const pageSize = page.getViewport({ scale: 1.0 })
         
-        for (const annotationRef of pageAnnotations) {
+        // Use PDF.js built-in getAnnotations() method
+        const pdfAnnotations = await page.getAnnotations()
+        
+        console.log(`Page ${pageNumber} annotations found:`, pdfAnnotations.length)
+        
+        if (pdfAnnotations.length === 0) {
+          console.log(`❌ Page ${pageNumber} - No annotations found`)
+          continue
+        }
+        
+        console.log(`✓ Page ${pageNumber} has ${pdfAnnotations.length} annotations to process`)
+        
+        // Process each annotation
+        for (const pdfAnnot of pdfAnnotations) {
           try {
-            const annotation = pdfDoc.context.lookup(annotationRef)
-            const extracted = await extractSingleAnnotation(annotation, pageNumber, pageSize)
+            console.log(`Processing annotation:`, pdfAnnot)
             
-            if (extracted) {
-              const normalizedBbox = normalizeCoordinates(extracted.rect, pageSize.width, pageSize.height)
-              
-              const annotation: Annotation = {
-                annotation_id: extracted.id,
-                page: pageNumber,
-                span_text: extracted.contents || '',
-                entity_type: mapAnnotationTypeToEntityType(extracted.type),
-                feedback_type: 'unreviewed',
-                bbox: extracted.rect,
-                normalized_bbox: normalizedBbox,
-                pdf_annotation_type: extracted.type,
-                pdf_annotation_id: extracted.id,
-              }
-              
-              annotations.push(annotation)
-              pagesWithAnnotations.add(pageNumber)
-              annotationTypes.add(extracted.type)
+            const annotType = pdfAnnot.subtype || 'Unknown'
+            console.log(`Annotation type: ${annotType}`)
+            
+            // Skip Popup annotations - they are associated with highlights/comments but not the content itself
+            if (annotType === 'Popup') {
+              console.log(`⏭️  Skipping Popup annotation (associated with parent annotation)`)
+              continue
             }
-          } catch (annotationError) {
-            errors.push(`Error processing annotation on page ${pageNumber}: ${annotationError}`)
+            
+            // Skip Link annotations (navigation links, not user annotations)
+            if (annotType === 'Link') {
+              console.log(`⏭️  Skipping Link annotation (navigation only)`)
+              continue
+            }
+            
+            // Get rectangle coordinates
+            let rect = pdfAnnot.rect || [0, 0, 0, 0]
+            console.log(`Rectangle: ${rect}`)
+            
+            // Convert PDF coordinates to our format
+            // PDF.js already gives us coordinates in page space, but we need to handle bottom-left origin
+            const [x1, y1, x2, y2] = rect
+            const bbox: BoundingBox = {
+              x: Math.min(x1, x2),
+              y: pageSize.height - Math.max(y1, y2), // Flip Y coordinate
+              w: Math.abs(x2 - x1),
+              h: Math.abs(y2 - y1),
+            }
+            
+            // Get annotation content/text
+            const contents = pdfAnnot.contents || ''
+            console.log(`Contents: ${contents}`)
+            
+            // Normalize bbox
+            const normalizedBbox = normalizeCoordinates(bbox, pageSize.width, pageSize.height)
+            
+            const annotation: Annotation = {
+              annotation_id: pdfAnnot.id || `ann_${pageNumber}_${Date.now()}_${Math.random()}`,
+              page: pageNumber,
+              span_text: contents,
+              entity_type: mapAnnotationTypeToEntityType(annotType),
+              feedback_type: 'unreviewed',
+              bbox: bbox,
+              normalized_bbox: normalizedBbox,
+              pdf_annotation_type: annotType,
+              pdf_annotation_id: pdfAnnot.id || '',
+            }
+            
+            annotations.push(annotation)
+            pagesWithAnnotations.add(pageNumber)
+            annotationTypes.add(annotType)
+            console.log(`✅ Extracted annotation: ${annotType} on page ${pageNumber}`)
+          } catch (annotError) {
+            console.error(`Error processing annotation on page ${pageNumber}:`, annotError)
+            errors.push(`Error processing annotation on page ${pageNumber}: ${annotError}`)
           }
         }
       } catch (pageError) {
+        console.error(`Error processing page ${pageNumber}:`, pageError)
         errors.push(`Error processing page ${pageNumber}: ${pageError}`)
       }
     }
-
+    
+    console.log('\n✅ Annotation extraction complete!')
+    console.log(`Total annotations: ${annotations.length}`)
+    console.log(`Pages with annotations: ${Array.from(pagesWithAnnotations).join(', ')}`)
+    console.log(`Annotation types: ${Array.from(annotationTypes).join(', ')}`)
+    
     return {
       success: true,
       annotations,
@@ -68,10 +123,11 @@ export async function extractAnnotationsFromPdf(
       },
     }
   } catch (error) {
+    console.error('Failed to extract annotations:', error)
     return {
       success: false,
       annotations: [],
-      errors: [`Failed to load PDF: ${error}`],
+      errors: [`Failed to extract annotations: ${error}`],
       metadata: {
         total_annotations: 0,
         pages_with_annotations: [],
@@ -82,100 +138,26 @@ export async function extractAnnotationsFromPdf(
 }
 
 /**
- * Extract a single annotation from pdf-lib annotation object
- */
-async function extractSingleAnnotation(
-  annotation: any,
-  pageNumber: number,
-  pageSize: { width: number; height: number }
-): Promise<PdfAnnotationExtracted | null> {
-  try {
-    const type = annotation.Subtype?.name || 'Unknown'
-    const rect = annotation.Rect || [0, 0, 0, 0]
-    const contents = annotation.Contents?.toString() || ''
-    const title = annotation.T?.toString() || ''
-    const color = annotation.C ? `rgb(${annotation.C.join(',')})` : undefined
-    const opacity = annotation.CA || 1
-    const borderWidth = annotation.BS?.W || annotation.Border?.[3] || 1
-    const borderStyle = annotation.BS?.S?.name || 'Solid'
-
-    // Convert PDF coordinates (bottom-left origin) to top-left origin
-    const [x1, y1, x2, y2] = rect
-    const bbox: BoundingBox = {
-      x: Math.min(x1, x2),
-      y: pageSize.height - Math.max(y1, y2), // Flip Y coordinate
-      w: Math.abs(x2 - x1),
-      h: Math.abs(y2 - y1),
-    }
-
-    return {
-      id: annotation.ref?.toString() || `ann_${Date.now()}_${Math.random()}`,
-      type,
-      pageNumber,
-      rect: bbox,
-      contents,
-      title,
-      color,
-      opacity,
-      borderWidth,
-      borderStyle,
-    }
-  } catch (error) {
-    console.warn('Error extracting single annotation:', error)
-    return null
-  }
-}
-
-/**
  * Map PDF annotation types to entity types for our schema
  */
 function mapAnnotationTypeToEntityType(pdfType: string): string {
   const typeMap: Record<string, string> = {
-    'Highlight': 'Highlight',
-    'Underline': 'Underline',
-    'Squiggly': 'Squiggly',
-    'StrikeOut': 'StrikeOut',
-    'FreeText': 'Text',
-    'Note': 'Note',
-    'Square': 'Rectangle',
-    'Circle': 'Circle',
-    'Line': 'Line',
-    'Polygon': 'Polygon',
-    'Ink': 'Ink',
-    'Stamp': 'Stamp',
+    'Highlight': 'highlight',
+    'Underline': 'underline',
+    'StrikeOut': 'strikeout',
+    'Squiggly': 'squiggly',
+    'Text': 'comment',
+    'FreeText': 'freetext',
+    'Square': 'square',
+    'Circle': 'circle',
+    'Polygon': 'polygon',
+    'PolyLine': 'polyline',
+    'Line': 'line',
+    'Ink': 'ink',
+    'Stamp': 'stamp',
+    'Caret': 'caret',
+    'FileAttachment': 'file',
   }
   
-  return typeMap[pdfType] || 'Unknown'
-}
-
-/**
- * Normalize coordinates to 0-1 range
- */
-function normalizeCoordinates(
-  bbox: BoundingBox,
-  pageWidth: number,
-  pageHeight: number
-): NormalizedBoundingBox {
-  return {
-    x: bbox.x / pageWidth,
-    y: bbox.y / pageHeight,
-    w: bbox.w / pageWidth,
-    h: bbox.h / pageHeight,
-  }
-}
-
-/**
- * Denormalize coordinates back to PDF units
- */
-export function denormalizeCoordinates(
-  normalizedBbox: NormalizedBoundingBox,
-  pageWidth: number,
-  pageHeight: number
-): BoundingBox {
-  return {
-    x: normalizedBbox.x * pageWidth,
-    y: normalizedBbox.y * pageHeight,
-    w: normalizedBbox.w * pageWidth,
-    h: normalizedBbox.h * pageHeight,
-  }
+  return typeMap[pdfType] || pdfType.toLowerCase()
 }
