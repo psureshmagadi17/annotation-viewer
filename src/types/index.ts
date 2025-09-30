@@ -24,6 +24,8 @@ export interface Annotation {
   notes?: string
   pdf_annotation_type?: string // Original PDF annotation type (highlight, comment, etc.)
   pdf_annotation_id?: string // Original PDF annotation ID
+  quad_points?: number[][] // For multi-line highlights: array of [x1,y1,x2,y2,x3,y3,x4,y4] quadrilaterals
+  normalized_quads?: number[][] // Normalized quad points (0-1 range)
 }
 
 export interface FeedbackSession {

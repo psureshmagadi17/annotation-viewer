@@ -43,6 +43,7 @@ export async function extractAnnotationsFromPdfJs(
         for (const pdfAnnot of pdfAnnotations) {
           try {
             console.log(`Processing annotation:`, pdfAnnot)
+            console.log(`Available properties:`, Object.keys(pdfAnnot))
             
             const annotType = pdfAnnot.subtype || 'Unknown'
             console.log(`Annotation type: ${annotType}`)
@@ -63,6 +64,10 @@ export async function extractAnnotationsFromPdfJs(
             let rect = pdfAnnot.rect || [0, 0, 0, 0]
             console.log(`Rectangle: ${rect}`)
             
+            // Get QuadPoints for multi-line highlights - try different property names
+            let quadPoints = pdfAnnot.quadPoints || pdfAnnot.QuadPoints || pdfAnnot.quadpoints
+            console.log(`QuadPoints available:`, !!quadPoints)
+            
             // Convert PDF coordinates to our format
             // PDF.js already gives us coordinates in page space, but we need to handle bottom-left origin
             const [x1, y1, x2, y2] = rect
@@ -80,6 +85,41 @@ export async function extractAnnotationsFromPdfJs(
             // Normalize bbox
             const normalizedBbox = normalizeCoordinates(bbox, pageSize.width, pageSize.height)
             
+            // Process QuadPoints if available (for multi-line highlights)
+            let processedQuadPoints: number[][] | undefined
+            let normalizedQuads: number[][] | undefined
+            
+            if (quadPoints && Array.isArray(quadPoints) && quadPoints.length > 0) {
+              // QuadPoints come as flat array: [x1,y1,x2,y2,x3,y3,x4,y4, ...] for each quad
+              // Group into quads of 8 values each, then convert Y coordinates
+              processedQuadPoints = []
+              normalizedQuads = []
+              
+              for (let i = 0; i < quadPoints.length; i += 8) {
+                const quad = quadPoints.slice(i, i + 8)
+                if (quad.length === 8) {
+                  // Flip Y coordinates for each point in the quad
+                  const flippedQuad = [
+                    quad[0], pageSize.height - quad[1], // point 1
+                    quad[2], pageSize.height - quad[3], // point 2
+                    quad[4], pageSize.height - quad[5], // point 3
+                    quad[6], pageSize.height - quad[7], // point 4
+                  ]
+                  processedQuadPoints.push(flippedQuad)
+                  
+                  // Normalize the quad points
+                  const normalizedQuad = [
+                    quad[0] / pageSize.width, quad[1] / pageSize.height,
+                    quad[2] / pageSize.width, quad[3] / pageSize.height,
+                    quad[4] / pageSize.width, quad[5] / pageSize.height,
+                    quad[6] / pageSize.width, quad[7] / pageSize.height,
+                  ]
+                  normalizedQuads.push(normalizedQuad)
+                }
+              }
+              console.log(`Processed ${processedQuadPoints.length} quads for multi-line highlight`)
+            }
+            
             const annotation: Annotation = {
               annotation_id: pdfAnnot.id || `ann_${pageNumber}_${Date.now()}_${Math.random()}`,
               page: pageNumber,
@@ -90,6 +130,8 @@ export async function extractAnnotationsFromPdfJs(
               normalized_bbox: normalizedBbox,
               pdf_annotation_type: annotType,
               pdf_annotation_id: pdfAnnot.id || '',
+              quad_points: processedQuadPoints,
+              normalized_quads: normalizedQuads,
             }
             
             annotations.push(annotation)

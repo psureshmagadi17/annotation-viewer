@@ -180,6 +180,56 @@ const AnnotationOverlay: React.FC<AnnotationOverlayProps> = ({
   return (
     <div className="absolute inset-0 pointer-events-none">
       {annotations.map((annotation) => {
+        const isSelected = viewerState.current_annotation_id === annotation.annotation_id
+        
+        // If annotation has QuadPoints, render multiple rectangles for multi-line highlights
+        if (annotation.normalized_quads && annotation.normalized_quads.length > 0) {
+          console.log(`Rendering ${annotation.normalized_quads.length} quads for annotation ${annotation.annotation_id}`)
+          
+          return (
+            <React.Fragment key={annotation.annotation_id}>
+              {annotation.normalized_quads.map((quad, index) => {
+                // Quad format: [x1,y1, x2,y2, x3,y3, x4,y4]
+                // We'll create a rectangle from the min/max coordinates
+                const xs = [quad[0], quad[2], quad[4], quad[6]]
+                const ys = [quad[1], quad[3], quad[5], quad[7]]
+                const minX = Math.min(...xs)
+                const minY = Math.min(...ys)
+                const maxX = Math.max(...xs)
+                const maxY = Math.max(...ys)
+                
+                const left = minX * viewport.width
+                const top = minY * viewport.height
+                const width = (maxX - minX) * viewport.width
+                const height = (maxY - minY) * viewport.height
+                
+                console.log(`Quad ${index}: left=${left}, top=${top}, width=${width}, height=${height}`)
+                
+                return (
+                  <div
+                    key={`${annotation.annotation_id}-quad-${index}`}
+                    className={cn(
+                      "absolute pointer-events-auto cursor-pointer border-2 transition-all hover:shadow-md",
+                      isSelected
+                        ? "border-primary bg-primary/20"
+                        : "border-yellow-400 bg-yellow-400/20 hover:bg-yellow-400/30"
+                    )}
+                    style={{
+                      left: `${left}px`,
+                      top: `${top}px`,
+                      width: `${width}px`,
+                      height: `${height}px`,
+                    }}
+                    onClick={() => selectAnnotation(annotation.annotation_id)}
+                    title={`${annotation.entity_type}: ${annotation.span_text}`}
+                  />
+                )
+              })}
+            </React.Fragment>
+          )
+        }
+        
+        // Fallback to single rectangle if no QuadPoints
         if (!annotation.normalized_bbox) {
           console.warn(`Annotation missing normalized_bbox:`, annotation)
           return null
@@ -192,8 +242,6 @@ const AnnotationOverlay: React.FC<AnnotationOverlayProps> = ({
         const height = h * viewport.height
 
         console.log(`Annotation overlay: left=${left}, top=${top}, width=${width}, height=${height}`)
-
-        const isSelected = viewerState.current_annotation_id === annotation.annotation_id
 
         return (
           <div
