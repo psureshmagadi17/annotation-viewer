@@ -248,7 +248,7 @@ export const FeedbackPanel: React.FC<FeedbackPanelProps> = ({ className }) => {
         <div className="space-y-2">
           <div className="flex items-center justify-between">
             <span className="text-sm font-medium text-primary">
-              {currentAnnotation.entity_type}
+              {currentAnnotation.annotation_title || currentAnnotation.entity_type}
             </span>
             <span className="text-xs text-muted-foreground">
               Page {currentAnnotation.page}

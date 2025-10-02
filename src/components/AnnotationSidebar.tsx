@@ -282,10 +282,10 @@ export const AnnotationSidebar: React.FC<AnnotationSidebarProps> = ({ className 
                               )}
                             >
                               <div className="space-y-2">
-                                {/* Header with entity type and status */}
+                                {/* Header with annotation title and status */}
                                 <div className="flex items-center justify-between">
                                   <span className="text-sm font-medium text-primary">
-                                    {annotation.entity_type}
+                                    {annotation.annotation_title || annotation.entity_type}
                                   </span>
                                   <div className={cn("flex items-center gap-1", statusColor)}>
                                     <StatusIcon className="w-4 h-4" />

@@ -18,6 +18,7 @@ export interface Annotation {
   page: number
   span_text: string
   entity_type: string
+  annotation_title?: string // Title/subject from PDF annotation properties
   feedback_type: 'true_positive' | 'false_positive' | 'false_negative' | 'unreviewed'
   bbox?: BoundingBox
   normalized_bbox?: NormalizedBoundingBox
