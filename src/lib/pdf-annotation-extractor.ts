@@ -42,8 +42,32 @@ export async function extractAnnotationsFromPdfJs(
         // Process each annotation
         for (const pdfAnnot of pdfAnnotations) {
           try {
+            console.log(`🔍 STARTING ANNOTATION PROCESSING`)
             console.log(`Processing annotation:`, pdfAnnot)
             console.log(`Available properties:`, Object.keys(pdfAnnot))
+            
+            // Log all properties with their values to see what's available
+            console.log(`All annotation properties:`, {
+              id: pdfAnnot.id,
+              title: pdfAnnot.title,
+              author: pdfAnnot.author,
+              creator: pdfAnnot.creator,
+              subject: pdfAnnot.subject,
+              content: pdfAnnot.content,
+              contentsObj: pdfAnnot.contentsObj,
+              T: pdfAnnot.T,
+              Subject: pdfAnnot.Subject,
+              Title: pdfAnnot.Title,
+              name: pdfAnnot.name,
+              NM: pdfAnnot.NM,
+              Contents: pdfAnnot.Contents
+            })
+            
+            // Also log ALL properties dynamically to catch anything we missed
+            console.log(`🔍 DYNAMIC PROPERTY INSPECTION:`, Object.keys(pdfAnnot).reduce((acc, key) => {
+              acc[key] = pdfAnnot[key];
+              return acc;
+            }, {}))
             
             const annotType = pdfAnnot.subtype || 'Unknown'
             console.log(`Annotation type: ${annotType}`)
@@ -121,11 +145,13 @@ export async function extractAnnotationsFromPdfJs(
             }
             
             // Try to get annotation title from various possible properties
-            // Check for content property (used by PyMuPDF/fitz)
-            let possibleTitle = pdfAnnot.content ||
+            // Check for titleObj.str first (this is where PyMuPDF/fitz stores titles)
+            let possibleTitle = (pdfAnnot.titleObj && pdfAnnot.titleObj.str) ||
+                               pdfAnnot.content ||
                                (pdfAnnot.contentsObj && pdfAnnot.contentsObj.str) ||
                                pdfAnnot.title || 
-                               pdfAnnot.subject || 
+                               pdfAnnot.author ||
+                               pdfAnnot.creator ||
                                pdfAnnot.T || 
                                pdfAnnot.Subject || 
                                pdfAnnot.Title ||
@@ -134,9 +160,12 @@ export async function extractAnnotationsFromPdfJs(
             
             // Debug: Log annotation title extraction (can be removed in production)
             console.log(`Annotation title candidates:`, {
+              titleObj: pdfAnnot.titleObj,
               content: pdfAnnot.content,
               contentsObj: pdfAnnot.contentsObj,
               title: pdfAnnot.title,
+              author: pdfAnnot.author,
+              creator: pdfAnnot.creator,
               subject: pdfAnnot.subject,
               T: pdfAnnot.T,
               Subject: pdfAnnot.Subject,
