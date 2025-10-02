@@ -34,7 +34,7 @@ export function convertToExportFormat(
   const exportAnnotations: ExportAnnotation[] = annotations.map(annotation => ({
     id: annotation.annotation_id,
     page: annotation.page,
-    entity_type: annotation.entity_type,
+    entity_type: annotation.annotation_title || annotation.entity_type, // Use title if available, fallback to type
     highlight: annotation.span_text,
     status: mapFeedbackTypeToStatus(annotation.feedback_type),
     comment: annotation.notes,
