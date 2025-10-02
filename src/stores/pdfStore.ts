@@ -22,6 +22,7 @@ interface PdfStore {
   setAnnotations: (annotations: Annotation[]) => void
   updateViewerState: (updates: Partial<ViewerState>) => void
   selectAnnotation: (annotationId: string) => void
+  updateAnnotationFeedback: (annotationId: string, feedback: Partial<Pick<Annotation, 'feedback_type' | 'notes'>>) => void
   clearPdf: () => void
 }
 
@@ -91,6 +92,28 @@ export const usePdfStore = create<PdfStore>((set, get) => ({
         }
       }))
     }
+  },
+
+  updateAnnotationFeedback: (annotationId, feedback) => {
+    set((state) => {
+      const updatedAnnotations = state.annotations.map(annotation => 
+        annotation.annotation_id === annotationId
+          ? { ...annotation, ...feedback }
+          : annotation
+      )
+
+      // Update annotationsByPage as well
+      const updatedAnnotationsByPage = { ...state.annotationsByPage }
+      Object.keys(updatedAnnotationsByPage).forEach(page => {
+        const pageNum = parseInt(page)
+        updatedAnnotationsByPage[pageNum] = updatedAnnotations.filter(a => a.page === pageNum)
+      })
+
+      return {
+        annotations: updatedAnnotations,
+        annotationsByPage: updatedAnnotationsByPage
+      }
+    })
   },
   
   clearPdf: () => {

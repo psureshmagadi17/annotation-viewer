@@ -1,6 +1,7 @@
 import { PdfLoader, PdfLoadingState } from '@/components/PdfLoader'
 import { PdfViewer } from '@/components/PdfViewer'
 import { AnnotationSidebar } from '@/components/AnnotationSidebar'
+import { FeedbackPanel } from '@/components/FeedbackPanel'
 import { usePdfStore } from '@/stores/pdfStore'
 import { Button } from '@/components/ui/button'
 import { Eye, EyeOff, ZoomIn, ZoomOut, RotateCcw, PanelLeft, PanelLeftClose } from 'lucide-react'
@@ -162,9 +163,16 @@ function App() {
               <PdfLoadingState error={error} />
             </div>
           ) : (
-            <div className="flex-1">
-              <PdfViewer className="h-full" />
-            </div>
+            <>
+              <div className="flex-1">
+                <PdfViewer className="h-full" />
+              </div>
+              
+              {/* Feedback Panel */}
+              {viewerState.current_annotation_id && (
+                <FeedbackPanel />
+              )}
+            </>
           )}
         </div>
       </main>
