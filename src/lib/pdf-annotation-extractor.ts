@@ -120,11 +120,42 @@ export async function extractAnnotationsFromPdfJs(
               console.log(`Processed ${processedQuadPoints.length} quads for multi-line highlight`)
             }
             
+            // Try to get annotation title from various possible properties
+            // Check for content property (used by PyMuPDF/fitz)
+            let possibleTitle = pdfAnnot.content ||
+                               (pdfAnnot.contentsObj && pdfAnnot.contentsObj.str) ||
+                               pdfAnnot.title || 
+                               pdfAnnot.subject || 
+                               pdfAnnot.T || 
+                               pdfAnnot.Subject || 
+                               pdfAnnot.Title ||
+                               pdfAnnot.name ||
+                               undefined
+            
+            // Debug: Log annotation title extraction (can be removed in production)
+            console.log(`Annotation title candidates:`, {
+              content: pdfAnnot.content,
+              contentsObj: pdfAnnot.contentsObj,
+              title: pdfAnnot.title,
+              subject: pdfAnnot.subject,
+              T: pdfAnnot.T,
+              Subject: pdfAnnot.Subject,
+              Title: pdfAnnot.Title,
+              name: pdfAnnot.name,
+              selected: possibleTitle
+            })
+
+            // If no title found, use annotation type as fallback
+            if (!possibleTitle) {
+              possibleTitle = annotType.toLowerCase()
+            }
+
             const annotation: Annotation = {
               annotation_id: pdfAnnot.id || `ann_${pageNumber}_${Date.now()}_${Math.random()}`,
               page: pageNumber,
               span_text: contents,
               entity_type: mapAnnotationTypeToEntityType(annotType),
+              annotation_title: possibleTitle,
               feedback_type: 'unreviewed',
               bbox: bbox,
               normalized_bbox: normalizedBbox,
