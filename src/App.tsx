@@ -2,6 +2,7 @@ import { PdfLoader, PdfLoadingState } from '@/components/PdfLoader'
 import { PdfViewer } from '@/components/PdfViewer'
 import { AnnotationSidebar } from '@/components/AnnotationSidebar'
 import { FeedbackPanel } from '@/components/FeedbackPanel'
+import { ExportButtons } from '@/components/ExportButtons'
 import { usePdfStore } from '@/stores/pdfStore'
 import { Button } from '@/components/ui/button'
 import { Eye, EyeOff, ZoomIn, ZoomOut, RotateCcw, PanelLeft, PanelLeftClose } from 'lucide-react'
@@ -66,9 +67,12 @@ function App() {
             </div>
             
             {pdfDocument && (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-4">
+                {/* Export buttons */}
+                <ExportButtons />
+
                 {/* Page navigation */}
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1 border-l pl-4">
                   <Button
                     variant="outline"
                     size="sm"
@@ -91,7 +95,7 @@ function App() {
                 </div>
 
                 {/* Zoom controls */}
-                <div className="flex items-center gap-1 border-l pl-2">
+                <div className="flex items-center gap-1 border-l pl-4">
                   <Button variant="outline" size="sm" onClick={handleZoomOut}>
                     <ZoomOut className="w-4 h-4" />
                   </Button>
@@ -107,7 +111,7 @@ function App() {
                 </div>
 
                 {/* Sidebar toggle */}
-                <div className="flex items-center gap-1 border-l pl-2">
+                <div className="flex items-center gap-1 border-l pl-4">
                   <Button
                     variant="outline"
                     size="sm"
@@ -124,7 +128,7 @@ function App() {
                 </div>
 
                 {/* Overlay toggle */}
-                <div className="flex items-center gap-1 border-l pl-2">
+                <div className="flex items-center gap-1 border-l pl-4">
                   <Button
                     variant="outline"
                     size="sm"
