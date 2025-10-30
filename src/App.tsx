@@ -3,10 +3,12 @@ import { PdfViewer } from '@/components/PdfViewer'
 import { AnnotationSidebar } from '@/components/AnnotationSidebar'
 import { FeedbackPanel } from '@/components/FeedbackPanel'
 import { ExportButtons } from '@/components/ExportButtons'
+import { CreateAnnotationDialog } from '@/components/CreateAnnotationDialog'
 import { usePdfStore } from '@/stores/pdfStore'
 import { Button } from '@/components/ui/button'
-import { Eye, EyeOff, ZoomIn, ZoomOut, RotateCcw, PanelLeft, PanelLeftClose } from 'lucide-react'
+import { Eye, EyeOff, ZoomIn, ZoomOut, RotateCcw, PanelLeft, PanelLeftClose, Plus } from 'lucide-react'
 import './App.css'
+import { useState, useEffect } from 'react'
 
 function App() {
   const {
@@ -18,6 +20,29 @@ function App() {
     annotations,
     updateViewerState,
   } = usePdfStore()
+
+  const [showCreateDialog, setShowCreateDialog] = useState(false)
+
+  // Keyboard shortcut for adding missing annotation
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Press 'M' key to add missing annotation
+      if (event.key === 'm' || event.key === 'M') {
+        // Don't trigger if user is typing in an input/textarea
+        if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) {
+          return
+        }
+        
+        if (pdfDocument && !showCreateDialog) {
+          event.preventDefault()
+          setShowCreateDialog(true)
+        }
+      }
+    }
+
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [pdfDocument, showCreateDialog])
 
   const handleZoomIn = () => {
     updateViewerState({ scale: Math.min(viewerState.scale * 1.2, 3.0) })
@@ -70,6 +95,20 @@ function App() {
               <div className="flex items-center gap-4">
                 {/* Export buttons */}
                 <ExportButtons />
+
+                {/* Add Missing Annotation button */}
+                <div className="flex items-center gap-1 border-l pl-4">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setShowCreateDialog(true)}
+                    className="gap-2"
+                    title="Add Missing Annotation (Press M)"
+                  >
+                    <Plus className="w-4 h-4" />
+                    Add Missing
+                  </Button>
+                </div>
 
                 {/* Page navigation */}
                 <div className="flex items-center gap-1 border-l pl-4">
@@ -180,6 +219,15 @@ function App() {
           )}
         </div>
       </main>
+
+      {/* Create Annotation Dialog */}
+      {pdfDocument && (
+        <CreateAnnotationDialog
+          open={showCreateDialog}
+          onOpenChange={setShowCreateDialog}
+          initialPage={viewerState.current_page}
+        />
+      )}
     </div>
   )
 }

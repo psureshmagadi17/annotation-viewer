@@ -23,6 +23,9 @@ interface PdfStore {
   updateViewerState: (updates: Partial<ViewerState>) => void
   selectAnnotation: (annotationId: string) => void
   updateAnnotationFeedback: (annotationId: string, feedback: Partial<Pick<Annotation, 'feedback_type' | 'notes'>>) => void
+  addUserAnnotation: (annotation: Omit<Annotation, 'annotation_id' | 'is_user_created' | 'feedback_type'>) => void
+  deleteUserAnnotation: (annotationId: string) => void
+  updateUserAnnotation: (annotationId: string, updates: Partial<Pick<Annotation, 'span_text' | 'entity_type' | 'notes'>>) => void
   clearPdf: () => void
 }
 
@@ -100,6 +103,84 @@ export const usePdfStore = create<PdfStore>((set, get) => ({
         annotation.annotation_id === annotationId
           ? { ...annotation, ...feedback }
           : annotation
+      )
+
+      // Update annotationsByPage as well
+      const updatedAnnotationsByPage = { ...state.annotationsByPage }
+      Object.keys(updatedAnnotationsByPage).forEach(page => {
+        const pageNum = parseInt(page)
+        updatedAnnotationsByPage[pageNum] = updatedAnnotations.filter(a => a.page === pageNum)
+      })
+
+      return {
+        annotations: updatedAnnotations,
+        annotationsByPage: updatedAnnotationsByPage
+      }
+    })
+  },
+
+  addUserAnnotation: (annotation) => {
+    const annotationId = `user_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+    
+    const newAnnotation: Annotation = {
+      ...annotation,
+      annotation_id: annotationId,
+      is_user_created: true,
+      feedback_type: 'false_negative',
+    }
+
+    set((state) => {
+      const updatedAnnotations = [...state.annotations, newAnnotation]
+      
+      // Update annotationsByPage
+      const updatedAnnotationsByPage = { ...state.annotationsByPage }
+      if (!updatedAnnotationsByPage[newAnnotation.page]) {
+        updatedAnnotationsByPage[newAnnotation.page] = []
+      }
+      updatedAnnotationsByPage[newAnnotation.page].push(newAnnotation)
+
+      return {
+        annotations: updatedAnnotations,
+        annotationsByPage: updatedAnnotationsByPage
+      }
+    })
+  },
+
+  deleteUserAnnotation: (annotationId) => {
+    set((state) => {
+      const annotation = state.annotations.find(a => a.annotation_id === annotationId)
+      if (!annotation || !annotation.is_user_created) {
+        return state // Only allow deletion of user-created annotations
+      }
+
+      const updatedAnnotations = state.annotations.filter(a => a.annotation_id !== annotationId)
+      
+      // Update annotationsByPage
+      const updatedAnnotationsByPage = { ...state.annotationsByPage }
+      if (updatedAnnotationsByPage[annotation.page]) {
+        updatedAnnotationsByPage[annotation.page] = updatedAnnotationsByPage[annotation.page].filter(
+          a => a.annotation_id !== annotationId
+        )
+      }
+
+      return {
+        annotations: updatedAnnotations,
+        annotationsByPage: updatedAnnotationsByPage
+      }
+    })
+  },
+
+  updateUserAnnotation: (annotationId, updates) => {
+    set((state) => {
+      const annotation = state.annotations.find(a => a.annotation_id === annotationId)
+      if (!annotation || !annotation.is_user_created) {
+        return state // Only allow updates to user-created annotations
+      }
+
+      const updatedAnnotations = state.annotations.map(a => 
+        a.annotation_id === annotationId
+          ? { ...a, ...updates }
+          : a
       )
 
       // Update annotationsByPage as well

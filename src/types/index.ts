@@ -20,6 +20,7 @@ export interface Annotation {
   entity_type: string
   annotation_title?: string // Title/subject from PDF annotation properties
   feedback_type: 'true_positive' | 'false_positive' | 'false_negative' | 'unreviewed'
+  is_user_created?: boolean // Flag to distinguish user-created annotations
   bbox?: BoundingBox
   normalized_bbox?: NormalizedBoundingBox
   notes?: string

@@ -15,7 +15,8 @@ import {
   Eye,
   EyeOff,
   FileText,
-  Hash
+  Hash,
+  PlusCircle
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Annotation } from '@/types'
@@ -65,9 +66,18 @@ export const AnnotationSidebar: React.FC<AnnotationSidebarProps> = ({ className 
     return types.sort()
   }, [annotations])
 
-  // Filter and group annotations
-  const filteredAnnotations = useMemo(() => {
-    return annotations.filter(annotation => {
+  // Separate extracted and user-created annotations
+  const extractedAnnotations = useMemo(() => {
+    return annotations.filter(a => !a.is_user_created)
+  }, [annotations])
+
+  const userCreatedAnnotations = useMemo(() => {
+    return annotations.filter(a => a.is_user_created)
+  }, [annotations])
+
+  // Filter and group extracted annotations
+  const filteredExtractedAnnotations = useMemo(() => {
+    return extractedAnnotations.filter(annotation => {
       const matchesSearch = annotation.span_text.toLowerCase().includes(searchTerm.toLowerCase()) ||
                            annotation.entity_type.toLowerCase().includes(searchTerm.toLowerCase())
       
@@ -77,27 +87,53 @@ export const AnnotationSidebar: React.FC<AnnotationSidebarProps> = ({ className 
 
       return matchesSearch && matchesEntityType && matchesStatus
     })
-  }, [annotations, searchTerm, entityTypeFilter, statusFilter])
+  }, [extractedAnnotations, searchTerm, entityTypeFilter, statusFilter])
 
-  // Group filtered annotations by page
-  const annotationsByPage = useMemo(() => {
-    return filteredAnnotations.reduce((acc, annotation) => {
+  // Filter user-created annotations (always show false negatives)
+  const filteredUserCreatedAnnotations = useMemo(() => {
+    return userCreatedAnnotations.filter(annotation => {
+      const matchesSearch = annotation.span_text.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                           annotation.entity_type.toLowerCase().includes(searchTerm.toLowerCase())
+      
+      const matchesEntityType = entityTypeFilter === 'all' || annotation.entity_type === entityTypeFilter
+
+      return matchesSearch && matchesEntityType
+    })
+  }, [userCreatedAnnotations, searchTerm, entityTypeFilter])
+
+  // Group filtered extracted annotations by page
+  const extractedAnnotationsByPage = useMemo(() => {
+    return filteredExtractedAnnotations.reduce((acc, annotation) => {
       if (!acc[annotation.page]) {
         acc[annotation.page] = []
       }
       acc[annotation.page].push(annotation)
       return acc
     }, {} as Record<number, Annotation[]>)
-  }, [filteredAnnotations])
+  }, [filteredExtractedAnnotations])
+
+  // Group filtered user-created annotations by page
+  const userCreatedAnnotationsByPage = useMemo(() => {
+    return filteredUserCreatedAnnotations.reduce((acc, annotation) => {
+      if (!acc[annotation.page]) {
+        acc[annotation.page] = []
+      }
+      acc[annotation.page].push(annotation)
+      return acc
+    }, {} as Record<number, Annotation[]>)
+  }, [filteredUserCreatedAnnotations])
 
   // Auto-expand current page and pages with annotations
   React.useEffect(() => {
     const pagesToExpand = new Set([viewerState.current_page])
-    Object.keys(annotationsByPage).forEach(page => {
+    Object.keys(extractedAnnotationsByPage).forEach(page => {
+      pagesToExpand.add(parseInt(page))
+    })
+    Object.keys(userCreatedAnnotationsByPage).forEach(page => {
       pagesToExpand.add(parseInt(page))
     })
     setExpandedPages(pagesToExpand)
-  }, [viewerState.current_page, annotationsByPage])
+  }, [viewerState.current_page, extractedAnnotationsByPage, userCreatedAnnotationsByPage])
 
   const handleTogglePage = (pageNumber: number) => {
     setExpandedPages(prev => {
@@ -123,9 +159,122 @@ export const AnnotationSidebar: React.FC<AnnotationSidebarProps> = ({ className 
   const isCurrentPage = (pageNumber: number) => pageNumber === viewerState.current_page
   const isCurrentAnnotation = (annotationId: string) => annotationId === viewerState.current_annotation_id
 
-  const sortedPages = Object.keys(annotationsByPage)
-    .map(Number)
-    .sort((a, b) => a - b)
+  // Render annotation list component
+  const renderAnnotationList = (
+    annotationsByPage: Record<number, Annotation[]>,
+    isUserCreated: boolean = false
+  ) => {
+    const sortedPages = Object.keys(annotationsByPage)
+      .map(Number)
+      .sort((a, b) => a - b)
+
+    if (sortedPages.length === 0) {
+      return null
+    }
+
+    return (
+      <div className="space-y-1">
+        {sortedPages.map(pageNumber => {
+          const pageAnnotations = annotationsByPage[pageNumber]
+          const isExpanded = isPageExpanded(pageNumber)
+          const isCurrent = isCurrentPage(pageNumber)
+
+          return (
+            <div key={`${isUserCreated ? 'user-' : ''}${pageNumber}`} className="border border-border rounded-md">
+              {/* Page Header */}
+              <button
+                onClick={() => handleTogglePage(pageNumber)}
+                className={cn(
+                  "w-full flex items-center justify-between p-3 text-left hover:bg-accent/50 transition-colors",
+                  isCurrent && "bg-accent"
+                )}
+              >
+                <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1">
+                    {isExpanded ? (
+                      <ChevronDown className="w-4 h-4" />
+                    ) : (
+                      <ChevronRight className="w-4 h-4" />
+                    )}
+                  </div>
+                  <Hash className="w-4 h-4 text-muted-foreground" />
+                  <span className="font-medium">Page {pageNumber}</span>
+                  <span className="text-sm text-muted-foreground">
+                    ({pageAnnotations.length} annotation{pageAnnotations.length !== 1 ? 's' : ''})
+                  </span>
+                </div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    handlePageClick(pageNumber)
+                  }}
+                  className="h-6 px-2 text-xs"
+                >
+                  Go
+                </Button>
+              </button>
+
+              {/* Page Annotations */}
+              {isExpanded && (
+                <div className="border-t border-border">
+                  {pageAnnotations.map((annotation) => {
+                    const StatusIcon = FEEDBACK_TYPE_ICONS[annotation.feedback_type]
+                    const statusColor = FEEDBACK_TYPE_COLORS[annotation.feedback_type]
+                    const statusLabel = FEEDBACK_TYPE_LABELS[annotation.feedback_type]
+                    const isCurrent = isCurrentAnnotation(annotation.annotation_id)
+
+                    return (
+                      <button
+                        key={annotation.annotation_id}
+                        onClick={() => handleAnnotationClick(annotation)}
+                        className={cn(
+                          "w-full p-3 text-left hover:bg-accent/50 transition-colors border-b border-border last:border-b-0",
+                          isCurrent && "bg-accent",
+                          isUserCreated && "bg-orange-50/50"
+                        )}
+                      >
+                        <div className="space-y-2">
+                          {/* Header with annotation title and status */}
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              {isUserCreated && (
+                                <PlusCircle className="w-3 h-3 text-orange-600" />
+                              )}
+                              <span className="text-sm font-medium text-primary">
+                                {annotation.annotation_title || annotation.entity_type}
+                              </span>
+                            </div>
+                            <div className={cn("flex items-center gap-1", statusColor)}>
+                              <StatusIcon className="w-4 h-4" />
+                              <span className="text-xs">{statusLabel}</span>
+                            </div>
+                          </div>
+
+                          {/* Annotation text */}
+                          <div className="text-sm text-foreground">
+                            {annotation.span_text}
+                          </div>
+
+                          {/* Notes if available */}
+                          {annotation.notes && (
+                            <div className="text-xs text-muted-foreground bg-muted/50 p-2 rounded">
+                              {annotation.notes}
+                            </div>
+                          )}
+                        </div>
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    )
+  }
 
   return (
     <div className={cn("w-80 bg-card border-r border-border flex flex-col", className)}>
@@ -200,7 +349,8 @@ export const AnnotationSidebar: React.FC<AnnotationSidebarProps> = ({ className 
       {/* Annotation List */}
       <ScrollArea className="flex-1">
         <div className="p-2">
-          {sortedPages.length === 0 ? (
+          {extractedAnnotationsByPage && Object.keys(extractedAnnotationsByPage).length === 0 && 
+           userCreatedAnnotationsByPage && Object.keys(userCreatedAnnotationsByPage).length === 0 ? (
             <div className="text-center py-8 text-muted-foreground">
               <FileText className="w-12 h-12 mx-auto mb-3 opacity-50" />
               <p>No annotations found</p>
@@ -220,99 +370,28 @@ export const AnnotationSidebar: React.FC<AnnotationSidebarProps> = ({ className 
               ) : null}
             </div>
           ) : (
-            <div className="space-y-1">
-              {sortedPages.map(pageNumber => {
-                const pageAnnotations = annotationsByPage[pageNumber]
-                const isExpanded = isPageExpanded(pageNumber)
-                const isCurrent = isCurrentPage(pageNumber)
+            <div className="space-y-4">
+              {/* Extracted Annotations Section */}
+              {extractedAnnotationsByPage && Object.keys(extractedAnnotationsByPage).length > 0 && (
+                <div>
+                  <h3 className="text-sm font-semibold mb-2 px-2">Extracted Annotations</h3>
+                  {renderAnnotationList(extractedAnnotationsByPage, false)}
+                </div>
+              )}
 
-                return (
-                  <div key={pageNumber} className="border border-border rounded-md">
-                    {/* Page Header */}
-                    <button
-                      onClick={() => handleTogglePage(pageNumber)}
-                      className={cn(
-                        "w-full flex items-center justify-between p-3 text-left hover:bg-accent/50 transition-colors",
-                        isCurrent && "bg-accent"
-                      )}
-                    >
-                      <div className="flex items-center gap-2">
-                        <div className="flex items-center gap-1">
-                          {isExpanded ? (
-                            <ChevronDown className="w-4 h-4" />
-                          ) : (
-                            <ChevronRight className="w-4 h-4" />
-                          )}
-                        </div>
-                        <Hash className="w-4 h-4 text-muted-foreground" />
-                        <span className="font-medium">Page {pageNumber}</span>
-                        <span className="text-sm text-muted-foreground">
-                          ({pageAnnotations.length} annotation{pageAnnotations.length !== 1 ? 's' : ''})
-                        </span>
-                      </div>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          handlePageClick(pageNumber)
-                        }}
-                        className="h-6 px-2 text-xs"
-                      >
-                        Go
-                      </Button>
-                    </button>
-
-                    {/* Page Annotations */}
-                    {isExpanded && (
-                      <div className="border-t border-border">
-                        {pageAnnotations.map((annotation) => {
-                          const StatusIcon = FEEDBACK_TYPE_ICONS[annotation.feedback_type]
-                          const statusColor = FEEDBACK_TYPE_COLORS[annotation.feedback_type]
-                          const statusLabel = FEEDBACK_TYPE_LABELS[annotation.feedback_type]
-                          const isCurrent = isCurrentAnnotation(annotation.annotation_id)
-
-                          return (
-                            <button
-                              key={annotation.annotation_id}
-                              onClick={() => handleAnnotationClick(annotation)}
-                              className={cn(
-                                "w-full p-3 text-left hover:bg-accent/50 transition-colors border-b border-border last:border-b-0",
-                                isCurrent && "bg-accent"
-                              )}
-                            >
-                              <div className="space-y-2">
-                                {/* Header with annotation title and status */}
-                                <div className="flex items-center justify-between">
-                                  <span className="text-sm font-medium text-primary">
-                                    {annotation.annotation_title || annotation.entity_type}
-                                  </span>
-                                  <div className={cn("flex items-center gap-1", statusColor)}>
-                                    <StatusIcon className="w-4 h-4" />
-                                    <span className="text-xs">{statusLabel}</span>
-                                  </div>
-                                </div>
-
-                                {/* Annotation text */}
-                                <div className="text-sm text-foreground">
-                                  {annotation.span_text}
-                                </div>
-
-                                {/* Notes if available */}
-                                {annotation.notes && (
-                                  <div className="text-xs text-muted-foreground bg-muted/50 p-2 rounded">
-                                    {annotation.notes}
-                                  </div>
-                                )}
-                              </div>
-                            </button>
-                          )
-                        })}
-                      </div>
-                    )}
-                  </div>
-                )
-              })}
+              {/* Missing Annotations Section */}
+              {userCreatedAnnotationsByPage && Object.keys(userCreatedAnnotationsByPage).length > 0 && (
+                <div>
+                  <h3 className="text-sm font-semibold mb-2 px-2 flex items-center gap-2">
+                    <PlusCircle className="w-4 h-4 text-orange-600" />
+                    Missing Annotations
+                    <span className="text-xs text-muted-foreground font-normal">
+                      ({filteredUserCreatedAnnotations.length})
+                    </span>
+                  </h3>
+                  {renderAnnotationList(userCreatedAnnotationsByPage, true)}
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -321,7 +400,12 @@ export const AnnotationSidebar: React.FC<AnnotationSidebarProps> = ({ className 
       {/* Footer with summary */}
       <div className="p-3 border-t border-border bg-muted/30">
         <div className="text-xs text-muted-foreground text-center">
-          {filteredAnnotations.length} of {annotations.length} annotations
+          {filteredExtractedAnnotations.length + filteredUserCreatedAnnotations.length} of {annotations.length} annotations
+          {filteredUserCreatedAnnotations.length > 0 && (
+            <span className="block mt-1">
+              {filteredUserCreatedAnnotations.length} missing annotation{filteredUserCreatedAnnotations.length !== 1 ? 's' : ''}
+            </span>
+          )}
           {searchTerm || entityTypeFilter !== 'all' || statusFilter !== 'all' ? (
             <span className="block mt-1">Filtered results</span>
           ) : null}

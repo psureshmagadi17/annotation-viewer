@@ -2,6 +2,8 @@ import React, { useEffect, useRef, useState, useCallback } from 'react'
 import { usePdfStore } from '@/stores/pdfStore'
 import { pdfjsLib } from '@/lib/pdf-worker'
 import { cn } from '@/lib/utils'
+import { CreateAnnotationDialog } from './CreateAnnotationDialog'
+import { getTextFromSelection, getCanvasCoordinates } from '@/lib/text-selection-utils'
 
 interface PdfViewerProps {
   className?: string
@@ -12,6 +14,15 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ className }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [isRendering, setIsRendering] = useState(false)
   const [pageViewport, setPageViewport] = useState<{ width: number; height: number } | null>(null)
+  
+  // Text selection state
+  const [isSelecting, setIsSelecting] = useState(false)
+  const [selectionStart, setSelectionStart] = useState<{ x: number; y: number } | null>(null)
+  const [selectionEnd, setSelectionEnd] = useState<{ x: number; y: number } | null>(null)
+  const [currentPage, setCurrentPage] = useState<any>(null)
+  const [currentViewport, setCurrentViewport] = useState<any>(null)
+  const [showCreateDialog, setShowCreateDialog] = useState(false)
+  const [selectedTextData, setSelectedTextData] = useState<any>(null)
   
   const {
     pdfDocument,
@@ -33,6 +44,8 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ className }) => {
       const viewport = page.getViewport({ scale })
       
       setPageViewport({ width: viewport.width, height: viewport.height })
+      setCurrentPage(page)
+      setCurrentViewport(viewport)
       
       const canvas = canvasRef.current
       const context = canvas.getContext('2d')
@@ -95,6 +108,72 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ className }) => {
     }
   }, [renderPage])
 
+  // Text selection handlers
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    if (!canvasRef.current || !viewerState.is_overlay_visible) return
+    
+    const coords = getCanvasCoordinates(e.nativeEvent, canvasRef.current)
+    if (coords) {
+      setIsSelecting(true)
+      setSelectionStart(coords)
+      setSelectionEnd(coords)
+    }
+  }, [viewerState.is_overlay_visible])
+
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    if (!isSelecting || !canvasRef.current || !selectionStart) return
+    
+    const coords = getCanvasCoordinates(e.nativeEvent, canvasRef.current)
+    if (coords) {
+      setSelectionEnd(coords)
+    }
+  }, [isSelecting, selectionStart])
+
+  const handleMouseUp = useCallback(async (e: React.MouseEvent) => {
+    if (!isSelecting || !selectionStart || !selectionEnd || !currentPage || !currentViewport) {
+      setIsSelecting(false)
+      setSelectionStart(null)
+      setSelectionEnd(null)
+      return
+    }
+
+    // Check if selection has meaningful size
+    const minSize = 10
+    if (Math.abs(selectionEnd.x - selectionStart.x) < minSize || 
+        Math.abs(selectionEnd.y - selectionStart.y) < minSize) {
+      setIsSelecting(false)
+      setSelectionStart(null)
+      setSelectionEnd(null)
+      return
+    }
+
+    // Extract text from selection
+    const textSelection = await getTextFromSelection(
+      currentPage,
+      currentViewport,
+      selectionStart.x,
+      selectionStart.y,
+      selectionEnd.x,
+      selectionEnd.y
+    )
+
+    if (textSelection) {
+      setSelectedTextData({
+        text: textSelection.text,
+        page: textSelection.pageNumber,
+        bbox: textSelection.bbox,
+        normalizedBbox: textSelection.normalizedBbox,
+        quadPoints: textSelection.quadPoints,
+        normalizedQuads: textSelection.normalizedQuads,
+      })
+      setShowCreateDialog(true)
+    }
+
+    setIsSelecting(false)
+    setSelectionStart(null)
+    setSelectionEnd(null)
+  }, [isSelecting, selectionStart, selectionEnd, currentPage, currentViewport])
+
   if (isLoading) {
     return (
       <div className={cn("flex items-center justify-center h-full", className)}>
@@ -134,9 +213,32 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ className }) => {
         <div className="relative inline-block">
           <canvas
             ref={canvasRef}
-            className="block shadow-lg"
-            style={{ maxWidth: '100%', height: 'auto' }}
+            className="block shadow-lg select-none"
+            style={{ maxWidth: '100%', height: 'auto', cursor: isSelecting ? 'crosshair' : 'default' }}
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={() => {
+              if (isSelecting) {
+                setIsSelecting(false)
+                setSelectionStart(null)
+                setSelectionEnd(null)
+              }
+            }}
           />
+          
+          {/* Selection overlay */}
+          {isSelecting && selectionStart && selectionEnd && (
+            <div
+              className="absolute border-2 border-blue-500 bg-blue-500/20 pointer-events-none"
+              style={{
+                left: `${Math.min(selectionStart.x, selectionEnd.x)}px`,
+                top: `${Math.min(selectionStart.y, selectionEnd.y)}px`,
+                width: `${Math.abs(selectionEnd.x - selectionStart.x)}px`,
+                height: `${Math.abs(selectionEnd.y - selectionStart.y)}px`,
+              }}
+            />
+          )}
           
           {/* Annotation overlays will be rendered here */}
           {viewerState.is_overlay_visible && pageViewport && (
@@ -155,6 +257,25 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ className }) => {
           )}
         </div>
       </div>
+      
+      {/* Create Annotation Dialog */}
+      {selectedTextData && (
+        <CreateAnnotationDialog
+          open={showCreateDialog}
+          onOpenChange={(open) => {
+            setShowCreateDialog(open)
+            if (!open) {
+              setSelectedTextData(null)
+            }
+          }}
+          initialText={selectedTextData.text}
+          initialPage={selectedTextData.page}
+          initialBbox={selectedTextData.bbox}
+          initialNormalizedBbox={selectedTextData.normalizedBbox}
+          initialQuadPoints={selectedTextData.quadPoints}
+          initialNormalizedQuads={selectedTextData.normalizedQuads}
+        />
+      )}
     </div>
   )
 }
@@ -205,6 +326,8 @@ const AnnotationOverlay: React.FC<AnnotationOverlayProps> = ({
                 
                 console.log(`Quad ${index}: left=${left}, top=${top}, width=${width}, height=${height}`)
                 
+                const isUserCreated = annotation.is_user_created
+                
                 return (
                   <div
                     key={`${annotation.annotation_id}-quad-${index}`}
@@ -212,6 +335,8 @@ const AnnotationOverlay: React.FC<AnnotationOverlayProps> = ({
                       "absolute pointer-events-auto cursor-pointer border-2 transition-all hover:shadow-md",
                       isSelected
                         ? "border-primary bg-primary/20"
+                        : isUserCreated
+                        ? "border-dashed border-orange-500 bg-orange-500/20 hover:bg-orange-500/30"
                         : "border-yellow-400 bg-yellow-400/20 hover:bg-yellow-400/30"
                     )}
                     style={{
@@ -221,7 +346,7 @@ const AnnotationOverlay: React.FC<AnnotationOverlayProps> = ({
                       height: `${height}px`,
                     }}
                     onClick={() => selectAnnotation(annotation.annotation_id)}
-                    title={`${annotation.entity_type}: ${annotation.span_text}`}
+                    title={`${annotation.annotation_title || annotation.entity_type}: ${annotation.span_text}`}
                   />
                 )
               })}
@@ -243,6 +368,8 @@ const AnnotationOverlay: React.FC<AnnotationOverlayProps> = ({
 
         console.log(`Annotation overlay: left=${left}, top=${top}, width=${width}, height=${height}`)
 
+        const isUserCreated = annotation.is_user_created
+
         return (
           <div
             key={annotation.annotation_id}
@@ -250,6 +377,8 @@ const AnnotationOverlay: React.FC<AnnotationOverlayProps> = ({
               "absolute pointer-events-auto cursor-pointer border-2 transition-all hover:shadow-md",
               isSelected
                 ? "border-primary bg-primary/20"
+                : isUserCreated
+                ? "border-dashed border-orange-500 bg-orange-500/20 hover:bg-orange-500/30"
                 : "border-yellow-400 bg-yellow-400/20 hover:bg-yellow-400/30"
             )}
             style={{
@@ -259,7 +388,7 @@ const AnnotationOverlay: React.FC<AnnotationOverlayProps> = ({
               height: `${height}px`,
             }}
             onClick={() => selectAnnotation(annotation.annotation_id)}
-            title={`${annotation.entity_type}: ${annotation.span_text}`}
+            title={`${annotation.annotation_title || annotation.entity_type}: ${annotation.span_text}`}
           />
         )
       })}

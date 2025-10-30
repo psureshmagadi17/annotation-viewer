@@ -15,6 +15,7 @@ export interface ExportAnnotation {
   entity_type: string
   highlight: string
   status: 'correct' | 'incorrect' | 'needs_edit'
+  is_user_created?: boolean // Flag to indicate user-created (false negative) annotations
   comment?: string
   bbox?: {
     x: number
@@ -37,6 +38,7 @@ export function convertToExportFormat(
     entity_type: annotation.annotation_title || annotation.entity_type, // Use title if available, fallback to type
     highlight: annotation.span_text,
     status: mapFeedbackTypeToStatus(annotation.feedback_type),
+    is_user_created: annotation.is_user_created || false,
     comment: annotation.notes,
     bbox: annotation.bbox,
     notes: annotation.notes
@@ -91,6 +93,7 @@ export function exportToCsv(
     'entity_type',
     'highlight_text',
     'status',
+    'is_user_created',
     'comment',
     'notes',
     'bbox_x',
@@ -109,6 +112,7 @@ export function exportToCsv(
     annotation.entity_type,
     `"${annotation.highlight.replace(/"/g, '""')}"`, // Escape quotes
     annotation.status,
+    annotation.is_user_created ? 'true' : 'false',
     `"${annotation.comment?.replace(/"/g, '""') || ''}"`,
     `"${annotation.notes?.replace(/"/g, '""') || ''}"`,
     annotation.bbox?.x || '',

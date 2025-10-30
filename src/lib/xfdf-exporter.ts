@@ -23,7 +23,8 @@ export function exportToXfdf(annotations: Annotation[], fileName: string, includ
       let contents = annotation.span_text
       if (includeFeedback) {
         const statusText = getStatusText(annotation.feedback_type)
-        contents = `[${statusText}] ${annotation.span_text}`
+        const userCreatedPrefix = annotation.is_user_created ? '[USER-CREATED] ' : ''
+        contents = `${userCreatedPrefix}[${statusText}] ${annotation.span_text}`
         if (annotation.notes) {
           contents += `\n\nNotes: ${annotation.notes}`
         }
@@ -37,7 +38,7 @@ export function exportToXfdf(annotations: Annotation[], fileName: string, includ
         <open>no</open>
       </popup>
       <page>${annotation.page - 1}</page>
-      <title>${escapeXml(annotation.entity_type)}</title>
+      <title>${escapeXml(annotation.annotation_title || annotation.entity_type)}</title>
     </${annotation.pdf_annotation_type || 'highlight'}>`
     })
     .join('\n')

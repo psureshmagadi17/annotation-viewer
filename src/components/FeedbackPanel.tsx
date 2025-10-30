@@ -10,7 +10,10 @@ import {
   X,
   ChevronLeft,
   ChevronRight,
-  Save
+  Save,
+  Trash2,
+  Edit,
+  PlusCircle
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Annotation } from '@/types'
@@ -56,10 +59,15 @@ export const FeedbackPanel: React.FC<FeedbackPanelProps> = ({ className }) => {
     updateViewerState,
     selectAnnotation,
     updateAnnotationFeedback,
+    updateUserAnnotation,
+    deleteUserAnnotation,
   } = usePdfStore()
 
   const [notes, setNotes] = useState('')
   const [selectedStatus, setSelectedStatus] = useState<string>('unreviewed')
+  const [editableText, setEditableText] = useState('')
+  const [editableEntityType, setEditableEntityType] = useState('')
+  const [isEditing, setIsEditing] = useState(false)
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
   
   const notesTextareaRef = useRef<HTMLTextAreaElement>(null)
@@ -74,6 +82,9 @@ export const FeedbackPanel: React.FC<FeedbackPanelProps> = ({ className }) => {
     if (currentAnnotation) {
       setSelectedStatus(currentAnnotation.feedback_type)
       setNotes(currentAnnotation.notes || '')
+      setEditableText(currentAnnotation.span_text)
+      setEditableEntityType(currentAnnotation.entity_type)
+      setIsEditing(false)
       setHasUnsavedChanges(false)
       
       // Auto-focus notes textarea after a short delay
@@ -146,12 +157,45 @@ export const FeedbackPanel: React.FC<FeedbackPanelProps> = ({ className }) => {
   const handleSaveFeedback = () => {
     if (!currentAnnotation) return
 
+    if (currentAnnotation.is_user_created && isEditing) {
+      // Update user-created annotation text and entity type
+      updateUserAnnotation(currentAnnotation.annotation_id, {
+        span_text: editableText.trim(),
+        entity_type: editableEntityType,
+        notes: notes.trim() || undefined
+      })
+      setIsEditing(false)
+    }
+    
+    // Always update status and notes (works for both extracted and user-created)
     updateAnnotationFeedback(currentAnnotation.annotation_id, {
       feedback_type: selectedStatus as any,
       notes: notes.trim() || undefined
     })
 
     setHasUnsavedChanges(false)
+  }
+
+  // Handle delete for user-created annotations
+  const handleDelete = () => {
+    if (!currentAnnotation || !currentAnnotation.is_user_created) return
+    
+    if (confirm('Are you sure you want to delete this annotation?')) {
+      deleteUserAnnotation(currentAnnotation.annotation_id)
+      handleClosePanel()
+    }
+  }
+
+  // Handle text edit change
+  const handleTextChange = (value: string) => {
+    setEditableText(value)
+    setHasUnsavedChanges(true)
+  }
+
+  // Handle entity type edit change
+  const handleEntityTypeChange = (value: string) => {
+    setEditableEntityType(value)
+    setHasUnsavedChanges(true)
   }
 
   // Navigate to previous/next annotation
@@ -245,18 +289,89 @@ export const FeedbackPanel: React.FC<FeedbackPanelProps> = ({ className }) => {
 
       {/* Annotation Preview */}
       <div className="p-4 border-b border-border bg-muted/30">
-        <div className="space-y-2">
+        <div className="space-y-3">
           <div className="flex items-center justify-between">
-            <span className="text-sm font-medium text-primary">
-              {currentAnnotation.annotation_title || currentAnnotation.entity_type}
-            </span>
-            <span className="text-xs text-muted-foreground">
-              Page {currentAnnotation.page}
-            </span>
+            <div className="flex items-center gap-2">
+              {currentAnnotation.is_user_created && (
+                <PlusCircle className="w-4 h-4 text-orange-600" />
+              )}
+              <span className="text-sm font-medium text-primary">
+                {currentAnnotation.is_user_created && isEditing ? (
+                  <select
+                    value={editableEntityType}
+                    onChange={(e) => handleEntityTypeChange(e.target.value)}
+                    className="px-2 py-1 text-sm border border-input rounded bg-background"
+                  >
+                    <option value="dx">dx</option>
+                    <option value="evidence">evidence</option>
+                    <option value="treatment">treatment</option>
+                    <option value="symptom">symptom</option>
+                    <option value="diagnosis">diagnosis</option>
+                    <option value="medication">medication</option>
+                    <option value="procedure">procedure</option>
+                    <option value="condition">condition</option>
+                    <option value="highlight">highlight</option>
+                    <option value="other">other</option>
+                  </select>
+                ) : (
+                  currentAnnotation.annotation_title || currentAnnotation.entity_type
+                )}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              {currentAnnotation.is_user_created && (
+                <>
+                  {!isEditing ? (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setIsEditing(true)}
+                      className="h-6 px-2 text-xs"
+                    >
+                      <Edit className="w-3 h-3" />
+                    </Button>
+                  ) : (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setIsEditing(false)
+                        setEditableText(currentAnnotation.span_text)
+                        setEditableEntityType(currentAnnotation.entity_type)
+                        setHasUnsavedChanges(false)
+                      }}
+                      className="h-6 px-2 text-xs"
+                    >
+                      Cancel
+                    </Button>
+                  )}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleDelete}
+                    className="h-6 px-2 text-xs text-destructive hover:text-destructive"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                  </Button>
+                </>
+              )}
+              <span className="text-xs text-muted-foreground">
+                Page {currentAnnotation.page}
+              </span>
+            </div>
           </div>
-          <div className="text-sm text-foreground bg-background p-3 rounded border">
-            {currentAnnotation.span_text}
-          </div>
+          {isEditing && currentAnnotation.is_user_created ? (
+            <Textarea
+              value={editableText}
+              onChange={(e) => handleTextChange(e.target.value)}
+              className="min-h-[60px] resize-none text-sm"
+              rows={3}
+            />
+          ) : (
+            <div className="text-sm text-foreground bg-background p-3 rounded border">
+              {currentAnnotation.span_text}
+            </div>
+          )}
         </div>
       </div>
 
