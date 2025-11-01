@@ -14,6 +14,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ className }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const [isRendering, setIsRendering] = useState(false)
   const [pageViewport, setPageViewport] = useState<{ width: number; height: number } | null>(null)
+  const [canvasDisplaySize, setCanvasDisplaySize] = useState<{ width: number; height: number } | null>(null)
   
   // Text selection state
   const [isSelecting, setIsSelecting] = useState(false)
@@ -91,6 +92,28 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ className }) => {
       renderPage(viewerState.current_page)
     }
   }, [pdfDocument, viewerState.current_page, renderPage])
+
+  // Update canvas display size when it changes (for CSS scaling)
+  useEffect(() => {
+    if (canvasRef.current && pageViewport) {
+      const updateSize = () => {
+        if (canvasRef.current) {
+          const rect = canvasRef.current.getBoundingClientRect()
+          setCanvasDisplaySize({ width: rect.width, height: rect.height })
+        }
+      }
+      
+      updateSize()
+      const resizeObserver = new ResizeObserver(updateSize)
+      resizeObserver.observe(canvasRef.current)
+      
+      window.addEventListener('resize', updateSize)
+      return () => {
+        resizeObserver.disconnect()
+        window.removeEventListener('resize', updateSize)
+      }
+    }
+  }, [pageViewport])
 
   // Handle scale changes
   useEffect(() => {
@@ -210,7 +233,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ className }) => {
   return (
     <div className={cn("relative h-full overflow-auto", className)} ref={containerRef}>
       <div className="flex justify-center p-4">
-        <div className="relative inline-block">
+        <div className="relative inline-block" style={{ width: canvasDisplaySize?.width || 'auto', height: canvasDisplaySize?.height || 'auto' }}>
           <canvas
             ref={canvasRef}
             className="block shadow-lg select-none"
@@ -228,14 +251,14 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ className }) => {
           />
           
           {/* Selection overlay */}
-          {isSelecting && selectionStart && selectionEnd && (
+          {isSelecting && selectionStart && selectionEnd && canvasDisplaySize && canvasRef.current && (
             <div
               className="absolute border-2 border-blue-500 bg-blue-500/20 pointer-events-none"
               style={{
-                left: `${Math.min(selectionStart.x, selectionEnd.x)}px`,
-                top: `${Math.min(selectionStart.y, selectionEnd.y)}px`,
-                width: `${Math.abs(selectionEnd.x - selectionStart.x)}px`,
-                height: `${Math.abs(selectionEnd.y - selectionStart.y)}px`,
+                left: `${(Math.min(selectionStart.x, selectionEnd.x) / canvasRef.current.width) * canvasDisplaySize.width}px`,
+                top: `${(Math.min(selectionStart.y, selectionEnd.y) / canvasRef.current.height) * canvasDisplaySize.height}px`,
+                width: `${(Math.abs(selectionEnd.x - selectionStart.x) / canvasRef.current.width) * canvasDisplaySize.width}px`,
+                height: `${(Math.abs(selectionEnd.y - selectionStart.y) / canvasRef.current.height) * canvasDisplaySize.height}px`,
               }}
             />
           )}
@@ -246,6 +269,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ className }) => {
               pageNumber={viewerState.current_page}
               viewport={pageViewport}
               annotations={annotationsByPage[viewerState.current_page] || []}
+              canvasRef={canvasRef}
             />
           )}
           
@@ -285,18 +309,44 @@ interface AnnotationOverlayProps {
   pageNumber: number
   viewport: { width: number; height: number }
   annotations: any[]
+  canvasRef?: React.RefObject<HTMLCanvasElement>
 }
 
 const AnnotationOverlay: React.FC<AnnotationOverlayProps> = ({
   pageNumber,
   viewport,
   annotations,
+  canvasRef,
 }) => {
   const { selectAnnotation, viewerState } = usePdfStore()
+  const [canvasDisplaySize, setCanvasDisplaySize] = React.useState<{ width: number; height: number } | null>(null)
+
+  // Get actual displayed size of canvas (accounts for CSS scaling)
+  React.useEffect(() => {
+    if (canvasRef?.current) {
+      const updateSize = () => {
+        const rect = canvasRef.current!.getBoundingClientRect()
+        setCanvasDisplaySize({ width: rect.width, height: rect.height })
+      }
+      
+      updateSize()
+      window.addEventListener('resize', updateSize)
+      return () => window.removeEventListener('resize', updateSize)
+    }
+  }, [canvasRef])
+
+  // Use displayed size if available, otherwise fall back to viewport
+  const displayWidth = canvasDisplaySize?.width || viewport.width
+  const displayHeight = canvasDisplaySize?.height || viewport.height
+  
+  // Calculate scale factors if canvas is scaled
+  const scaleX = displayWidth / viewport.width
+  const scaleY = displayHeight / viewport.height
 
   console.log(`Rendering ${annotations.length} annotation overlays on page ${pageNumber}`)
   console.log(`Viewport:`, viewport)
-  console.log(`Annotations:`, annotations)
+  console.log(`Display size:`, canvasDisplaySize)
+  console.log(`Scale:`, { scaleX, scaleY })
 
   return (
     <div className="absolute inset-0 pointer-events-none">
@@ -319,10 +369,10 @@ const AnnotationOverlay: React.FC<AnnotationOverlayProps> = ({
                 const maxX = Math.max(...xs)
                 const maxY = Math.max(...ys)
                 
-                const left = minX * viewport.width
-                const top = minY * viewport.height
-                const width = (maxX - minX) * viewport.width
-                const height = (maxY - minY) * viewport.height
+                const left = minX * displayWidth
+                const top = minY * displayHeight
+                const width = (maxX - minX) * displayWidth
+                const height = (maxY - minY) * displayHeight
                 
                 console.log(`Quad ${index}: left=${left}, top=${top}, width=${width}, height=${height}`)
                 
@@ -361,10 +411,10 @@ const AnnotationOverlay: React.FC<AnnotationOverlayProps> = ({
         }
 
         const { x, y, w, h } = annotation.normalized_bbox
-        const left = x * viewport.width
-        const top = y * viewport.height
-        const width = w * viewport.width
-        const height = h * viewport.height
+        const left = x * displayWidth
+        const top = y * displayHeight
+        const width = w * displayWidth
+        const height = h * displayHeight
 
         console.log(`Annotation overlay: left=${left}, top=${top}, width=${width}, height=${height}`)
 
