@@ -3,7 +3,18 @@ import * as pdfjsLib from 'pdfjs-dist'
 
 // Set up the worker with fallback options
 const workerSrc = (() => {
-  // Try local file first
+  // Single-file mode: check for inline worker blob URL first
+  if (import.meta.env.VITE_SINGLEFILE === 'true') {
+    // Check if worker URL was set up by inline script
+    if (typeof window !== 'undefined' && (window as any).__PDFJS_WORKER_URL__) {
+      return (window as any).__PDFJS_WORKER_URL__
+    }
+    // Fallback to CDN if blob URL not available
+    const version = pdfjsLib.version
+    return `https://unpkg.com/pdfjs-dist@${version}/build/pdf.worker.min.js`
+  }
+  
+  // Try local file first (dev mode)
   if (import.meta.env.DEV) {
     return '/pdf.worker.min.js'
   }
