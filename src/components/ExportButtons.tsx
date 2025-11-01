@@ -2,7 +2,6 @@ import React, { useState } from 'react'
 import { usePdfStore } from '@/stores/pdfStore'
 import { Button } from '@/components/ui/button'
 import { 
-  Download, 
   FileText, 
   FileSpreadsheet, 
   FileType,
@@ -16,7 +15,7 @@ import {
   downloadFile, 
   generateFilename 
 } from '@/lib/export-utils'
-import { exportToXfdf, downloadXfdf } from '@/lib/xfdf-exporter'
+import { exportToXfdf } from '@/lib/xfdf-exporter'
 
 interface ExportButtonsProps {
   className?: string

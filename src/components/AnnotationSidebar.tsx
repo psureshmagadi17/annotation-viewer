@@ -12,8 +12,6 @@ import {
   XCircle,
   AlertCircle,
   HelpCircle,
-  Eye,
-  EyeOff,
   FileText,
   Hash,
   PlusCircle

@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react'
 import { usePdfStore } from '@/stores/pdfStore'
-import { pdfjsLib } from '@/lib/pdf-worker'
 import { cn } from '@/lib/utils'
 import { CreateAnnotationDialog } from './CreateAnnotationDialog'
 import { getTextFromSelection, getCanvasCoordinates } from '@/lib/text-selection-utils'
@@ -27,12 +26,14 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ className }) => {
   
   const {
     pdfDocument,
-    pdfMeta,
     isLoading,
     error,
     viewerState,
     annotationsByPage,
   } = usePdfStore()
+  
+  // Ref to store current render task for cancellation
+  const renderTaskRef = useRef<any>(null)
 
   // Render a specific page
   const renderPage = useCallback(async (pageNumber: number) => {
@@ -64,27 +65,24 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ className }) => {
       }
 
       // Cancel any existing render task
-      if (renderPage.currentRenderTask) {
-        renderPage.currentRenderTask.cancel()
+      if (renderTaskRef.current) {
+        renderTaskRef.current.cancel()
       }
 
       const renderTask = page.render(renderContext)
-      renderPage.currentRenderTask = renderTask
+      renderTaskRef.current = renderTask
       
       await renderTask.promise
-      renderPage.currentRenderTask = null
-    } catch (err) {
+      renderTaskRef.current = null
+    } catch (err: unknown) {
       // Ignore rendering cancellation errors as they're expected when switching pages
-      if (err.name !== 'RenderingCancelledException') {
+      if (err instanceof Error && err.name !== 'RenderingCancelledException') {
         console.error('Error rendering page:', err)
       }
     } finally {
       setIsRendering(false)
     }
   }, [pdfDocument, viewerState.scale])
-
-  // Store the current render task to cancel it if needed
-  renderPage.currentRenderTask = null
 
   // Render current page when it changes
   useEffect(() => {
@@ -125,11 +123,11 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ className }) => {
   // Cleanup render task on unmount
   useEffect(() => {
     return () => {
-      if (renderPage.currentRenderTask) {
-        renderPage.currentRenderTask.cancel()
+      if (renderTaskRef.current) {
+        renderTaskRef.current.cancel()
       }
     }
-  }, [renderPage])
+  }, [])
 
   // Text selection handlers
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
@@ -152,7 +150,7 @@ export const PdfViewer: React.FC<PdfViewerProps> = ({ className }) => {
     }
   }, [isSelecting, selectionStart])
 
-  const handleMouseUp = useCallback(async (e: React.MouseEvent) => {
+  const handleMouseUp = useCallback(async () => {
     if (!isSelecting || !selectionStart || !selectionEnd || !currentPage || !currentViewport) {
       setIsSelecting(false)
       setSelectionStart(null)
@@ -359,7 +357,7 @@ const AnnotationOverlay: React.FC<AnnotationOverlayProps> = ({
           
           return (
             <React.Fragment key={annotation.annotation_id}>
-              {annotation.normalized_quads.map((quad, index) => {
+              {annotation.normalized_quads.map((quad: number[], index: number) => {
                 // Quad format: [x1,y1, x2,y2, x3,y3, x4,y4]
                 // We'll create a rectangle from the min/max coordinates
                 const xs = [quad[0], quad[2], quad[4], quad[6]]

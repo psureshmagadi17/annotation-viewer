@@ -1,4 +1,4 @@
-import { readFileAsArrayBuffer, validatePdfFile } from './utils'
+import { validatePdfFile } from './utils'
 
 /**
  * Handle file selection for PDF loading

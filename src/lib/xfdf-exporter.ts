@@ -1,4 +1,4 @@
-import { Annotation, PdfDocumentMeta } from '@/types'
+import { Annotation } from '@/types'
 
 /**
  * Export annotations to XFDF format for Adobe compatibility

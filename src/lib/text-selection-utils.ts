@@ -16,9 +16,7 @@ export function calculateBboxFromSelection(
   startX: number,
   startY: number,
   endX: number,
-  endY: number,
-  pageWidth: number,
-  pageHeight: number
+  endY: number
 ): BoundingBox {
   const x = Math.min(startX, endX)
   const y = Math.min(startY, endY)
@@ -59,9 +57,6 @@ export async function getTextFromSelection(
     const textContent = await pdfPage.getTextContent()
     const pageWidth = viewport.width
     const pageHeight = viewport.height
-    
-    // Convert canvas coordinates to PDF coordinates
-    const scale = viewport.scale
     
     // Get text items that intersect with selection rectangle
     const selectedText: string[] = []
@@ -123,8 +118,9 @@ export async function getTextFromSelection(
     const quadPoints: number[][] = []
     if (textItems.length > 1) {
       // Group text items by line (similar Y coordinates)
-      const lines: typeof textItems[][] = []
-      textItems.forEach(item => {
+      type TextItem = { x: number; y: number; width: number; height: number; str: string }
+      const lines: TextItem[][] = []
+      textItems.forEach((item: TextItem) => {
         const lineIndex = lines.findIndex(line => 
           Math.abs(line[0].y - item.y) < 5 // Within 5px = same line
         )

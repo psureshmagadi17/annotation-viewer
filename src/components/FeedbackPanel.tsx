@@ -6,7 +6,6 @@ import {
   CheckCircle, 
   XCircle, 
   AlertCircle, 
-  HelpCircle, 
   X,
   ChevronLeft,
   ChevronRight,
@@ -16,7 +15,6 @@ import {
   PlusCircle
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { Annotation } from '@/types'
 
 interface FeedbackPanelProps {
   className?: string

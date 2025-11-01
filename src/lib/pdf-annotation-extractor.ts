@@ -1,4 +1,4 @@
-import { Annotation, AnnotationExtractionResult, BoundingBox, NormalizedBoundingBox } from '@/types'
+import { Annotation, AnnotationExtractionResult, BoundingBox } from '@/types'
 import { normalizeCoordinates } from './utils'
 
 /**
@@ -7,7 +7,7 @@ import { normalizeCoordinates } from './utils'
  */
 export async function extractAnnotationsFromPdfJs(
   pdfDocument: any,
-  fileName: string
+  _fileName: string
 ): Promise<AnnotationExtractionResult> {
   try {
     console.log('🔍 Starting annotation extraction from PDF using PDF.js...')
