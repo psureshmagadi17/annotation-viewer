@@ -20,20 +20,6 @@ interface CreateAnnotationDialogProps {
   initialNormalizedQuads?: number[][]
 }
 
-const ENTITY_TYPES = [
-  'dx',
-  'evidence',
-  'treatment',
-  'symptom',
-  'diagnosis',
-  'medication',
-  'procedure',
-  'condition',
-  'highlight',
-  'comment',
-  'other'
-]
-
 export const CreateAnnotationDialog: React.FC<CreateAnnotationDialogProps> = ({
   open,
   onOpenChange,
@@ -47,7 +33,7 @@ export const CreateAnnotationDialog: React.FC<CreateAnnotationDialogProps> = ({
   const { pdfMeta, viewerState, addUserAnnotation } = usePdfStore()
   
   const [text, setText] = useState(initialText)
-  const [entityType, setEntityType] = useState('dx')
+  const [entityType, setEntityType] = useState('')
   const [page, setPage] = useState(initialPage || viewerState.current_page)
   const [notes, setNotes] = useState('')
   const [errors, setErrors] = useState<Record<string, string>>({})
@@ -57,7 +43,7 @@ export const CreateAnnotationDialog: React.FC<CreateAnnotationDialogProps> = ({
     if (open) {
       setText(initialText)
       setPage(initialPage || viewerState.current_page)
-      setEntityType('dx')
+      setEntityType('')
       setNotes('')
       setErrors({})
     }
@@ -137,22 +123,17 @@ export const CreateAnnotationDialog: React.FC<CreateAnnotationDialogProps> = ({
             {/* Entity Type */}
             <div>
               <Label htmlFor="entityType">Entity Type</Label>
-              <select
+              <Input
                 id="entityType"
+                type="text"
                 value={entityType}
                 onChange={(e) => {
                   setEntityType(e.target.value)
                   if (errors.entityType) setErrors({ ...errors, entityType: '' })
                 }}
-                className={cn(
-                  "w-full px-3 py-2 text-sm border border-input rounded-md bg-background",
-                  errors.entityType && 'border-destructive'
-                )}
-              >
-                {ENTITY_TYPES.map(type => (
-                  <option key={type} value={type}>{type}</option>
-                ))}
-              </select>
+                placeholder="Enter entity type..."
+                className={cn(errors.entityType && 'border-destructive')}
+              />
               {errors.entityType && (
                 <p className="text-sm text-destructive mt-1">{errors.entityType}</p>
               )}
