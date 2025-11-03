@@ -4,16 +4,22 @@ import path from 'path'
 
 // https://vitejs.dev/config/
 export default defineConfig({
-  plugins: [react()],
+  plugins: [
+    react({
+      // Explicitly configure JSX runtime
+      jsxRuntime: 'automatic'
+    })
+  ],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
     },
-    // Add this to ensure React is deduplicated
-    dedupe: ['react', 'react-dom'],
+    dedupe: ['react', 'react-dom', 'react/jsx-runtime'],
   },
   optimizeDeps: {
     include: ['pdfjs-dist', 'react', 'react-dom', 'react/jsx-runtime'],
+    // Ensure Radix UI dependencies are also included
+    exclude: [],
   },
   build: {
     rollupOptions: {
@@ -22,22 +28,20 @@ export default defineConfig({
           'pdfjs': ['pdfjs-dist'],
         },
       },
-      // Add this to handle the jsx-runtime issue
-      external: [],
+      // Remove the external array - it was counterproductive
     },
-    // Add this to ensure compatibility
     commonjsOptions: {
       include: [/node_modules/],
       transformMixedEsModules: true,
     },
+    // Ensure proper handling of JSX
+    sourcemap: false, // Can help with build issues
   },
   server: {
     fs: {
       allow: ['..']
     }
   },
-  // Ensure proper MIME type for worker files
-  assetsInclude: ['**/*.js'],
   // Configure headers for worker files
   define: {
     'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'development')
