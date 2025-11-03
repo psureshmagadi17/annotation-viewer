@@ -9,9 +9,11 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, './src'),
     },
+    // Add this to ensure React is deduplicated
+    dedupe: ['react', 'react-dom'],
   },
   optimizeDeps: {
-    include: ['pdfjs-dist'],
+    include: ['pdfjs-dist', 'react', 'react-dom', 'react/jsx-runtime'],
   },
   build: {
     rollupOptions: {
@@ -20,6 +22,13 @@ export default defineConfig({
           'pdfjs': ['pdfjs-dist'],
         },
       },
+      // Add this to handle the jsx-runtime issue
+      external: [],
+    },
+    // Add this to ensure compatibility
+    commonjsOptions: {
+      include: [/node_modules/],
+      transformMixedEsModules: true,
     },
   },
   server: {
