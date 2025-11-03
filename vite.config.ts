@@ -42,8 +42,6 @@ export default defineConfig({
       allow: ['..']
     }
   },
-  // Ensure proper MIME type for worker files
-  // assetsInclude: ['**/*.js'],
   // Configure headers for worker files
   define: {
     'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV || 'development')

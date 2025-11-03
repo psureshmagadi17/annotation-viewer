@@ -1,6 +1,6 @@
 // PDF.js worker configuration
 import * as pdfjsLib from 'pdfjs-dist'
-import workerUrl from 'pdfjs-dist/build/pdf.worker.min.js?worker&url'
+import workerUrl from 'pdfjs-dist/build/pdf.worker.mjs?worker&url'
 
 // Bundle the worker with Vite to serve from the same origin
 pdfjsLib.GlobalWorkerOptions.workerSrc = workerUrl
